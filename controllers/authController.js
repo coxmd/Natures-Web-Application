@@ -4,7 +4,7 @@ const jwt = require('jsonwebtoken');
 const User = require('./../models/userModel');
 const catchAsync = require('./../utils/catchAsync');
 const AppError = require('./../utils/appError');
-const sendEmail = require('./../utils/email');
+const Email = require('./../utils/email');
 
 const signToken = id => {
   return jwt.sign({ id: id }, process.env.JWT_SECRET, {
@@ -46,6 +46,10 @@ exports.signup = catchAsync(async (req, res, next) => {
   // });
 
   const newUser = await User.create(req.body);
+  const url = `${req.protocol}://${req.get('host')}/me`;
+  console.log(url);
+  await new Email(newUser, url).sendWelcome();
+
   createSendToken(newUser, 201, res);
 });
 
@@ -60,13 +64,11 @@ exports.login = catchAsync(async (req, res, next) => {
   //2) Check if user exists
   const user = await User.findOne({ email }).select('+password');
 
-  //   const correct = await user.correctPassword(password, user.password);
-
   if (!user || !(await user.correctPassword(password, user.password))) {
     return next(new AppError('Incorrect email and password', 401));
   }
 
-  //3) If everything is okay, send token to client
+  //3) If everything is okay, send jwt token to client and login the user
   createSendToken(user, 200, res);
 });
 
@@ -181,11 +183,11 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
   passwordConfirm to: ${resetURL}.\nIf you didn't forget your password, please ignore this email`;
 
   try {
-    await sendEmail({
-      email: user.email,
-      subject: 'Your password reset token (valid for 10min)',
-      message
-    });
+    // await sendEmail({
+    //   email: user.email,
+    //   subject: 'Your password reset token (valid for 10min)',
+    //   message
+    // });
 
     res.status(200).json({
       status: 'success',
@@ -195,8 +197,6 @@ exports.forgotPassword = catchAsync(async (req, res, next) => {
     user.passwordResetToken = undefined;
     user.passwordResetExpires = undefined;
     await user.save({ validateBeforeSave: false });
-
-    console.log(err);
 
     return next(
       new AppError('There was an error sending the email. Try again later!'),
